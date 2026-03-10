@@ -221,16 +221,38 @@ def load_split_data(train_start_year: int, train_year: int, train_end_month: int
     }
 
 
-def get_active_model_rmse(client: MlflowClient, model_name: str, active_alias: str):
+def get_alias_model_rmse_on_test(
+    client: MlflowClient,
+    model_name: str,
+    alias: str,
+    x_test: pd.DataFrame,
+    y_test: pd.Series,
+) -> float | None:
     try:
-        mv = client.get_model_version_by_alias(model_name, active_alias)
+        mv = client.get_model_version_by_alias(model_name, alias)
     except Exception:
-        return None, None
+        return None
 
-    run = client.get_run(mv.run_id)
-    if not run:
-        return mv, None
-    return mv, run.data.metrics.get("final_test_rmse")
+    model_uri = f"models:/{model_name}@{alias}"
+    try:
+        model = mlflow.sklearn.load_model(model_uri)
+        y_pred_log = model.predict(x_test)
+        rmse = rmse_from_log(y_test, y_pred_log)
+        logging.info(
+            "Alias '%s' currently points to v%s with test RMSE=%.3f",
+            alias,
+            mv.version,
+            rmse,
+        )
+        return rmse
+    except Exception as e:
+        logging.info(
+            "Could not evaluate alias '%s' (v%s) on current test set: %s",
+            alias,
+            mv.version,
+            e,
+        )
+        return None
 
 
 def promote_candidate_if_better(
@@ -239,13 +261,12 @@ def promote_candidate_if_better(
     active_alias: str,
     candidate_version: int,
     candidate_rmse: float,
+    active_rmse_on_current_test: float | None,
 ) -> tuple[bool, float | None]:
     promoted = False
-    active_mv, active_rmse = get_active_model_rmse(
-        client, registered_model_name, active_alias
-    )
+    active_rmse = active_rmse_on_current_test
 
-    if active_mv is None or active_rmse is None or candidate_rmse < float(active_rmse):
+    if active_rmse is None or candidate_rmse < float(active_rmse):
         client.set_registered_model_alias(
             registered_model_name, active_alias, candidate_version
         )
@@ -371,12 +392,21 @@ def run_retrain(
         )
         logging.info("Set candidate alias '%s' -> v%s", candidate_alias, new_version)
 
+        active_rmse_on_current_test = get_alias_model_rmse_on_test(
+            client=client,
+            model_name=registered_model_name,
+            alias=active_alias,
+            x_test=x_test,
+            y_test=y_test,
+        )
+
         promoted, active_rmse = promote_candidate_if_better(
             client=client,
             registered_model_name=registered_model_name,
             active_alias=active_alias,
             candidate_version=new_version,
             candidate_rmse=final_test_rmse,
+            active_rmse_on_current_test=active_rmse_on_current_test,
         )
 
         mlflow.log_param("registered_model_name", registered_model_name)
