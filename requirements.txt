@@ -1,0 +1,10 @@
+numpy
+pandas
+pyarrow
+scikit-learn
+category-encoders
+statsmodels
+matplotlib
+seaborn
+ydata-profiling
+setuptools==80.0.0

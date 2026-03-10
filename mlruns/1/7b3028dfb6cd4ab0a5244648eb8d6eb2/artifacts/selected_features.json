@@ -1,0 +1,11 @@
+{
+  "selected_feature_names": [
+    "num__pickup_month",
+    "num__is_weekend",
+    "num__rush_hour",
+    "num__trip_distance_log",
+    "ohe__RatecodeID_1.0",
+    "ohe__RatecodeID_5.0",
+    "te__route"
+  ]
+}

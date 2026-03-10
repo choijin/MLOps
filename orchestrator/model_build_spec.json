@@ -1,0 +1,21 @@
+{
+  "kept_num_cols": [
+    "passenger_count",
+    "pickup_hour",
+    "pickup_dayofweek",
+    "pickup_month",
+    "is_weekend",
+    "rush_hour",
+    "trip_duration_min_log",
+    "trip_distance_log"
+  ],
+  "selected_feature_names": [
+    "num__trip_distance_log",
+    "num__pickup_month",
+    "num__is_weekend",
+    "num__rush_hour",
+    "ohe__RatecodeID_1.0",
+    "ohe__RatecodeID_5.0",
+    "te__route"
+  ]
+}
