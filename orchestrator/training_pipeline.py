@@ -22,25 +22,6 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_{year}-{month:02d}.parquet"
 
-FEATURE_COLS = [
-    "VendorID",
-    "passenger_count",
-    "trip_distance_log",
-    "RatecodeID",
-    "trip_type",
-    "store_and_fwd_flag",
-    "pickup_hour",
-    "pickup_dayofweek",
-    "pickup_month",
-    "is_weekend",
-    "rush_hour",
-    "trip_duration_min_log",
-    "route",
-]
-TARGET = "fare_amount"
-OHE_COLS = ["VendorID", "RatecodeID", "trip_type", "store_and_fwd_flag"]
-TE_COLS = ["route"]
-
 
 class SparseColumnSelector(BaseEstimator, TransformerMixin):
     def __init__(self, indices: list[int]):
@@ -59,7 +40,9 @@ def rmse_from_log(y_true_log: pd.Series, y_pred_log: np.ndarray) -> float:
     return float(np.sqrt(mean_squared_error(y_true, y_pred)))
 
 
-def make_preprocessor(kept_num_cols: list[str]) -> ColumnTransformer:
+def make_preprocessor(
+    num_cols: list[str], ohe_cols: list[str], te_cols: list[str]
+) -> ColumnTransformer:
     num_pipe = Pipeline(
         [
             ("imp", SimpleImputer(strategy="median")),
@@ -77,7 +60,7 @@ def make_preprocessor(kept_num_cols: list[str]) -> ColumnTransformer:
             (
                 "te",
                 TargetEncoder(
-                    cols=TE_COLS,
+                    cols=te_cols,
                     smoothing=20,
                     handle_missing="value",
                     handle_unknown="value",
@@ -88,27 +71,32 @@ def make_preprocessor(kept_num_cols: list[str]) -> ColumnTransformer:
 
     return ColumnTransformer(
         [
-            ("num", num_pipe, kept_num_cols),
-            ("ohe", ohe_pipe, OHE_COLS),
-            ("te", te_pipe, TE_COLS),
+            ("num", num_pipe, num_cols),
+            ("ohe", ohe_pipe, ohe_cols),
+            ("te", te_pipe, te_cols),
         ]
     )
 
 
-def clean_and_engineer(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+def clean_and_engineer(
+    df: pd.DataFrame,
+    feature_cols: list[str],
+    ohe_cols: list[str],
+    target: str,
+) -> tuple[pd.DataFrame, pd.Series]:
     df = df.copy()
     df["lpep_pickup_datetime"] = pd.to_datetime(df["lpep_pickup_datetime"])
     df["lpep_dropoff_datetime"] = pd.to_datetime(df["lpep_dropoff_datetime"])
 
-    df["trip_duration_min"] = (
+    trip_duration_min = (
         df["lpep_dropoff_datetime"] - df["lpep_pickup_datetime"]
     ).dt.total_seconds() / 60
+    pickup_hour = df["lpep_pickup_datetime"].dt.hour
+    pickup_dayofweek = df["lpep_pickup_datetime"].dt.dayofweek
 
-    df["pickup_hour"] = df["lpep_pickup_datetime"].dt.hour
-    df["pickup_dayofweek"] = df["lpep_pickup_datetime"].dt.dayofweek
     df["pickup_month"] = df["lpep_pickup_datetime"].dt.month
-    df["is_weekend"] = df["pickup_dayofweek"].isin([5, 6]).astype(int)
-    df["rush_hour"] = df["pickup_hour"].isin([7, 8, 9, 16, 17, 18, 19]).astype(int)
+    df["is_weekend"] = pickup_dayofweek.isin([5, 6]).astype(int)
+    df["rush_hour"] = pickup_hour.isin([7, 8, 9, 16, 17, 18, 19]).astype(int)
 
     df["route"] = (
         df["PULocationID"].astype("Int64").astype(str)
@@ -117,7 +105,7 @@ def clean_and_engineer(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     )
 
     mask = (
-        df["trip_duration_min"].between(1, 180)
+        trip_duration_min.between(1, 180)
         & df["fare_amount"].between(0.5, 500)
         & df["trip_distance"].between(0.01, 100)
         & df["passenger_count"].between(0, 8)
@@ -125,12 +113,10 @@ def clean_and_engineer(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     df = df.loc[mask].copy()
 
     df["trip_distance_log"] = np.log1p(df["trip_distance"])
-    df["trip_duration_min_log"] = np.log1p(df["trip_duration_min"])
+    x = df[feature_cols].copy()
+    y = np.log1p(df[target].copy())
 
-    x = df[FEATURE_COLS].copy()
-    y = np.log1p(df[TARGET].copy())
-
-    for col in OHE_COLS:
+    for col in ohe_cols:
         x[col] = x[col].astype(str)
 
     return x, y
@@ -138,7 +124,7 @@ def clean_and_engineer(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
 
 def load_month(year: int, month: int) -> pd.DataFrame:
     url = BASE_URL.format(year=year, month=month)
-    logging.info("Downloading %d-%02d ...", year, month)
+    logging.info(f"Downloading {year}-{month:02d} ...")
     return pd.read_parquet(url)
 
 
@@ -170,25 +156,30 @@ def choose_default_cutoff(today: date) -> tuple[int, int]:
     return today.year, today.month - 1
 
 
-def load_split_data(train_start_year: int, train_year: int, train_end_month: int):
+def load_split_data(
+    train_start_year: int,
+    train_year: int,
+    train_end_month: int,
+    feature_cols: list[str],
+    ohe_cols: list[str],
+    target: str,
+):
     if train_end_month < 1 or train_end_month > 12:
         raise ValueError("train_end_month must be between 1 and 12")
 
     test_year, test_month = next_month(train_year, train_end_month)
 
     logging.info(
-        "Training month: %d.1 - %d.%d", train_start_year, train_year, train_end_month
+        f"Training month: {train_start_year}.1 - {train_year}.{train_end_month}"
     )
-    logging.info("Testing month: %d.%d", test_year, test_month)
+    logging.info(f"Testing month: {test_year}.{test_month}")
 
     try:
         df_test_raw = load_month(test_year, test_month)
     except Exception as e:
         logging.info(
-            "Next-month target data %d-%02d unavailable. Skipping run. Error: %s",
-            test_year,
-            test_month,
-            e,
+            f"Next-month target data {test_year}-{test_month:02d} unavailable. "
+            f"Skipping run. Error: {e}"
         )
         return None
 
@@ -197,8 +188,10 @@ def load_split_data(train_start_year: int, train_year: int, train_end_month: int
     )
     df_train_raw = load_month_pairs(train_pairs)
 
-    x_train_full, y_train_full = clean_and_engineer(df_train_raw)
-    x_test, y_test = clean_and_engineer(df_test_raw)
+    x_train_full, y_train_full = clean_and_engineer(
+        df_train_raw, feature_cols, ohe_cols, target
+    )
+    x_test, y_test = clean_and_engineer(df_test_raw, feature_cols, ohe_cols, target)
 
     x_train, x_val, y_train, y_val = train_test_split(
         x_train_full, y_train_full, test_size=0.3, random_state=42
@@ -221,85 +214,19 @@ def load_split_data(train_start_year: int, train_year: int, train_end_month: int
     }
 
 
-def get_alias_model_rmse_on_test(
-    client: MlflowClient,
-    model_name: str,
-    alias: str,
-    x_test: pd.DataFrame,
-    y_test: pd.Series,
-) -> float | None:
-    try:
-        mv = client.get_model_version_by_alias(model_name, alias)
-    except Exception:
-        return None
-
-    model_uri = f"models:/{model_name}@{alias}"
-    try:
-        model = mlflow.sklearn.load_model(model_uri)
-        y_pred_log = model.predict(x_test)
-        rmse = rmse_from_log(y_test, y_pred_log)
-        logging.info(
-            "Alias '%s' currently points to v%s with test RMSE=%.3f",
-            alias,
-            mv.version,
-            rmse,
-        )
-        return rmse
-    except Exception as e:
-        logging.info(
-            "Could not evaluate alias '%s' (v%s) on current test set: %s",
-            alias,
-            mv.version,
-            e,
-        )
-        return None
-
-
-def promote_candidate_if_better(
-    client: MlflowClient,
-    registered_model_name: str,
-    active_alias: str,
-    candidate_version: int,
-    candidate_rmse: float,
-    active_rmse_on_current_test: float | None,
-) -> tuple[bool, float | None]:
-    promoted = False
-    active_rmse = active_rmse_on_current_test
-
-    if active_rmse is None or candidate_rmse < float(active_rmse):
-        client.set_registered_model_alias(
-            registered_model_name, active_alias, candidate_version
-        )
-        logging.info("Candidate v%s promoted to '%s'.", candidate_version, active_alias)
-        promoted = True
-    else:
-        logging.info(
-            "Candidate v%s not promoted. active_rmse=%.3f, candidate_rmse=%.3f",
-            candidate_version,
-            float(active_rmse),
-            candidate_rmse,
-        )
-
-    return promoted, active_rmse
-
-
 def run_retrain(
     data: dict,
+    spec: dict,
     spec_path: Path,
     tracking_uri: str,
     experiment_name: str,
     registered_model_name: str,
-    active_alias: str,
     candidate_alias: str,
 ) -> int:
-    spec = json.loads(spec_path.read_text())
-
-    if "kept_num_cols" not in spec or "selected_feature_names" not in spec:
-        raise ValueError(
-            f"Spec file {spec_path} must contain kept_num_cols and selected_feature_names"
-        )
-
-    kept_num_cols = spec["kept_num_cols"]
+    target = spec["target"]
+    num_cols = spec["num_cols"]
+    ohe_cols = spec["ohe_cols"]
+    te_cols = spec["te_cols"]
     selected_feature_names = spec["selected_feature_names"]
 
     x_train = data["x_train"]
@@ -311,7 +238,7 @@ def run_retrain(
     x_test = data["x_test"]
     y_test = data["y_test"]
 
-    preprocessor = make_preprocessor(kept_num_cols)
+    preprocessor = make_preprocessor(num_cols, ohe_cols, te_cols)
     x_train_tx = preprocessor.fit_transform(x_train, y_train)
     feature_names = preprocessor.get_feature_names_out()
 
@@ -331,6 +258,7 @@ def run_retrain(
     ridge_alphas = np.logspace(-4, 4, 50)
     best_ridge_alpha = None
     best_ridge_val_rmse = float("inf")
+    alpha_search_results = []
 
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)
@@ -338,25 +266,25 @@ def run_retrain(
 
     with mlflow.start_run(run_name="retrain_with_frozen_features") as run:
         for alpha in ridge_alphas:
-            with mlflow.start_run(run_name=f"ridge_alpha_{alpha:.6f}", nested=True):
-                ridge = Ridge(alpha=alpha, random_state=42)
-                ridge.fit(x_train_sel, y_train)
-                val_rmse = rmse_from_log(y_val, ridge.predict(x_val_sel))
-                mlflow.log_param("alpha", float(alpha))
-                mlflow.log_metric("val_rmse", val_rmse)
-                if val_rmse < best_ridge_val_rmse:
-                    best_ridge_val_rmse = val_rmse
-                    best_ridge_alpha = alpha
+            ridge = Ridge(alpha=alpha, random_state=42)
+            ridge.fit(x_train_sel, y_train)
+            val_rmse = rmse_from_log(y_val, ridge.predict(x_val_sel))
+            alpha_search_results.append(
+                {"alpha": float(alpha), "val_rmse": float(val_rmse)}
+            )
+            if val_rmse < best_ridge_val_rmse:
+                best_ridge_val_rmse = val_rmse
+                best_ridge_alpha = alpha
 
-        final_preprocessor = make_preprocessor(kept_num_cols)
-        x_train_full_tx = final_preprocessor.fit_transform(x_train_full, y_train_full)
+        final_preprocessor = make_preprocessor(num_cols, ohe_cols, te_cols)
+        final_preprocessor.fit(x_train_full, y_train_full)
         final_feature_names = final_preprocessor.get_feature_names_out()
         final_name_to_idx = {n: i for i, n in enumerate(final_feature_names)}
         final_selected_indices = [final_name_to_idx[n] for n in selected_feature_names]
 
         final_inference_model = Pipeline(
             [
-                ("preprocess", make_preprocessor(kept_num_cols)),
+                ("preprocess", make_preprocessor(num_cols, ohe_cols, te_cols)),
                 ("select", SparseColumnSelector(final_selected_indices)),
                 ("reg", Ridge(alpha=best_ridge_alpha, random_state=42)),
             ]
@@ -372,15 +300,14 @@ def run_retrain(
         mlflow.log_param("test_year", data["test_year"])
         mlflow.log_param("test_month", data["test_month"])
         mlflow.log_param("spec_path", str(spec_path))
+        mlflow.log_param("alpha_search_iterations", len(alpha_search_results))
         mlflow.log_param("selected_feature_count", len(selected_feature_names))
         mlflow.log_param("best_ridge_alpha", float(best_ridge_alpha))
         mlflow.log_metric("best_ridge_val_rmse", best_ridge_val_rmse)
         mlflow.log_metric("final_test_rmse", final_test_rmse)
 
-        mlflow.log_dict(
-            {"selected_feature_names": selected_feature_names},
-            "selected_features.json",
-        )
+        mlflow.log_dict(alpha_search_results, "alpha_search_results.json")
+        mlflow.log_dict(spec, "model_build_spec.json")
         mlflow.sklearn.log_model(final_inference_model, name="final_model")
         model_uri = f"runs:/{run.info.run_id}/final_model"
 
@@ -390,42 +317,38 @@ def run_retrain(
         client.set_registered_model_alias(
             registered_model_name, candidate_alias, new_version
         )
-        logging.info("Set candidate alias '%s' -> v%s", candidate_alias, new_version)
-
-        active_rmse_on_current_test = get_alias_model_rmse_on_test(
-            client=client,
-            model_name=registered_model_name,
-            alias=active_alias,
-            x_test=x_test,
-            y_test=y_test,
-        )
-
-        promoted, active_rmse = promote_candidate_if_better(
-            client=client,
-            registered_model_name=registered_model_name,
-            active_alias=active_alias,
-            candidate_version=new_version,
-            candidate_rmse=final_test_rmse,
-            active_rmse_on_current_test=active_rmse_on_current_test,
-        )
+        logging.info(f"Set candidate alias '{candidate_alias}' -> v{new_version}")
 
         mlflow.log_param("registered_model_name", registered_model_name)
         mlflow.log_param("registered_model_version", new_version)
-        mlflow.log_param("active_alias", active_alias)
         mlflow.log_param("candidate_alias", candidate_alias)
-        mlflow.log_param("promoted_to_active", promoted)
-        if active_rmse is not None:
-            mlflow.log_metric("active_model_test_rmse", float(active_rmse))
 
     metrics = {
         "best_ridge_val_rmse": round(best_ridge_val_rmse, 3),
         "final_test_rmse": round(final_test_rmse, 3),
     }
 
-    logging.info("Retrain complete")
-    logging.info("Model URI: %s", model_uri)
-    logging.info("Metrics: %s", json.dumps(metrics, indent=2))
+    logging.info(f"Retrain complete")
+    logging.info(f"Model URI: {model_uri}")
+    logging.info(f"Metrics: {json.dumps(metrics, indent=2)}")
     return 0
+
+
+def load_spec(spec_path: Path) -> dict:
+    spec = json.loads(spec_path.read_text())
+    required_keys = {
+        "target",
+        "num_cols",
+        "ohe_cols",
+        "te_cols",
+        "selected_feature_names",
+    }
+    missing_keys = sorted(required_keys - spec.keys())
+    if missing_keys:
+        raise ValueError(
+            f"Spec file {spec_path} is missing required keys: {missing_keys}"
+        )
+    return spec
 
 
 def parse_args() -> argparse.Namespace:
@@ -439,10 +362,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-year", type=int, default=default_year)
     parser.add_argument("--train-end-month", type=int, default=default_end)
     parser.add_argument("--spec-path", default="model_build_spec.json")
-    parser.add_argument("--tracking-uri", default="sqlite:///mlflow.db")
+    parser.add_argument("--tracking-uri", default="http://127.0.0.1:5001")
     parser.add_argument("--experiment-name", default="zoomcamp-model")
     parser.add_argument("--registered-model-name", default="nyc-taxi-ridge")
-    parser.add_argument("--active-alias", default="active")
     parser.add_argument("--candidate-alias", default="candidate")
     return parser.parse_args()
 
@@ -453,17 +375,27 @@ def main() -> int:
     )
 
     args = parse_args()
-    data = load_split_data(args.train_start_year, args.train_year, args.train_end_month)
+    spec_path = Path(args.spec_path)
+    spec = load_spec(spec_path)
+    feature_cols = spec["num_cols"] + spec["ohe_cols"] + spec["te_cols"]
+    data = load_split_data(
+        args.train_start_year,
+        args.train_year,
+        args.train_end_month,
+        feature_cols,
+        spec["ohe_cols"],
+        spec["target"],
+    )
     if data is None:
         return 0
 
     return run_retrain(
         data=data,
-        spec_path=Path(args.spec_path),
+        spec=spec,
+        spec_path=spec_path,
         tracking_uri=args.tracking_uri,
         experiment_name=args.experiment_name,
         registered_model_name=args.registered_model_name,
-        active_alias=args.active_alias,
         candidate_alias=args.candidate_alias,
     )
 

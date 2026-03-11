@@ -1,13 +1,16 @@
 {
-  "kept_num_cols": [
-    "passenger_count",
-    "pickup_hour",
-    "pickup_dayofweek",
+  "target": "fare_amount",
+  "num_cols": [
+    "trip_distance_log",
     "pickup_month",
     "is_weekend",
-    "rush_hour",
-    "trip_duration_min_log",
-    "trip_distance_log"
+    "rush_hour"
+  ],
+  "ohe_cols": [
+    "RatecodeID"
+  ],
+  "te_cols": [
+    "route"
   ],
   "selected_feature_names": [
     "num__trip_distance_log",
