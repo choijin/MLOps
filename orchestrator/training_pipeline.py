@@ -20,6 +20,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+try:
+    from .compare_models import compare_and_promote_candidate
+except ImportError:
+    from compare_models import compare_and_promote_candidate
+
 BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_{year}-{month:02d}.parquet"
 
 
@@ -222,6 +227,7 @@ def run_retrain(
     experiment_name: str,
     registered_model_name: str,
     candidate_alias: str,
+    champion_alias: str,
 ) -> int:
     target = spec["target"]
     num_cols = spec["num_cols"]
@@ -319,14 +325,38 @@ def run_retrain(
         )
         logging.info(f"Set candidate alias '{candidate_alias}' -> v{new_version}")
 
+        promotion_result = compare_and_promote_candidate(
+            test_x=x_test,
+            test_y=y_test,
+            metric_fn=rmse_from_log,
+            tracking_uri=tracking_uri,
+            model_name=registered_model_name,
+            candidate_alias=candidate_alias,
+            champion_alias=champion_alias,
+        )
+
         mlflow.log_param("registered_model_name", registered_model_name)
         mlflow.log_param("registered_model_version", new_version)
         mlflow.log_param("candidate_alias", candidate_alias)
+        mlflow.log_param("champion_alias", champion_alias)
+        mlflow.log_param("candidate_won", promotion_result["candidate_won"])
+        if promotion_result["champion_version"] is not None:
+            mlflow.log_param(
+                "previous_champion_version", promotion_result["champion_version"]
+            )
+        if promotion_result["promoted_version"] is not None:
+            mlflow.log_param("promoted_version", promotion_result["promoted_version"])
+        mlflow.log_metric("candidate_alias_rmse", promotion_result["candidate_rmse"])
+        if promotion_result["champion_rmse"] is not None:
+            mlflow.log_metric("champion_alias_rmse", promotion_result["champion_rmse"])
 
     metrics = {
         "best_ridge_val_rmse": round(best_ridge_val_rmse, 3),
         "final_test_rmse": round(final_test_rmse, 3),
+        "candidate_alias_rmse": round(promotion_result["candidate_rmse"], 3),
     }
+    if promotion_result["champion_rmse"] is not None:
+        metrics["champion_alias_rmse"] = round(promotion_result["champion_rmse"], 3)
 
     logging.info(f"Retrain complete")
     logging.info(f"Model URI: {model_uri}")
@@ -366,6 +396,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--experiment-name", default="zoomcamp-model")
     parser.add_argument("--registered-model-name", default="nyc-taxi-ridge")
     parser.add_argument("--candidate-alias", default="candidate")
+    parser.add_argument("--champion-alias", default="champion")
     return parser.parse_args()
 
 
@@ -397,6 +428,7 @@ def main() -> int:
         experiment_name=args.experiment_name,
         registered_model_name=args.registered_model_name,
         candidate_alias=args.candidate_alias,
+        champion_alias=args.champion_alias,
     )
 
 
