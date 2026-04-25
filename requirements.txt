@@ -7,4 +7,5 @@ statsmodels
 matplotlib
 seaborn
 ydata-profiling
-setuptools==80.0.0
+apache-airflow
+setuptools
