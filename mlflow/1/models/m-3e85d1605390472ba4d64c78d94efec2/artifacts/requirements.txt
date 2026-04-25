@@ -1,4 +1,4 @@
-mlflow==3.10.1
+mlflow==3.11.1
 category-encoders==2.9.0
 cloudpickle==3.1.2
 numpy==2.3.5
