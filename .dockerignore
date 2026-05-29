@@ -1,0 +1,8 @@
+.git
+.venv
+**/__pycache__
+**/.ipynb_checkpoints
+.airflow
+01_initial_ml_build
+02_model_training
+mlflow

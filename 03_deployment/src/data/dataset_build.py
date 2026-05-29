@@ -7,10 +7,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-try:
-    from .feature_engineering import prepare_training_data
-except ImportError:
-    from feature_engineering import prepare_training_data
+from src.features.feature_engineering import prepare_training_data
 
 
 BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_{year}-{month:02d}.parquet"
