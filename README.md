@@ -109,10 +109,23 @@ docker compose up --build api
 ```
 
 By default, the API serves `03_deployment/saved_models/model.joblib`. To serve a
-freshly trained MLflow run instead, pass its run ID:
+freshly trained MLflow run instead, put its run ID in the deployment env file:
 
 ```bash
-RUN_ID=<your_run_id> docker compose up --build api
+cp 03_deployment/config/deployment.env.example 03_deployment/config/deployment.env
+```
+
+Then edit `03_deployment/config/deployment.env`:
+
+```env
+RUN_ID=<your_run_id>
+MODEL_ARTIFACT_PATH=final_model
+```
+
+Start the API:
+
+```bash
+docker compose up --build api
 ```
 
 If `RUN_ID` is set, the API loads from MLflow. If `RUN_ID` is not set, it falls

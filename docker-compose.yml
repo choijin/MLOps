@@ -21,10 +21,11 @@ services:
       context: .
       dockerfile: 03_deployment/Dockerfile
     image: fair-price-prediction-service:v1
+    env_file:
+      - path: 03_deployment/config/deployment.env
+        required: false
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5001
-      RUN_ID: ${RUN_ID:-}
-      MODEL_ARTIFACT_PATH: ${MODEL_ARTIFACT_PATH:-final_model}
     volumes:
       - ./mlflow:/mlflow
     ports:

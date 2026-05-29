@@ -17,6 +17,10 @@ model.
 If `RUN_ID` is set, the API loads `runs:/<run_id>/final_model` from MLflow. If
 `RUN_ID` is not set, the API falls back to `saved_models/model.joblib`.
 
+For Docker Compose, put the selected run ID in
+`03_deployment/config/deployment.env`. Use `deployment.env.example` as the
+template.
+
 For local Docker usage, the root `docker-compose.yml` starts:
 
 - an `mlflow` service backed by `./mlflow`
