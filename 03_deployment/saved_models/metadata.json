@@ -1,0 +1,6 @@
+{
+  "model_name": "nyc-taxi-ridge",
+  "model_alias": "champion",
+  "model_version": 6,
+  "model_uri": "models:/nyc-taxi-ridge@champion"
+}

@@ -25,7 +25,7 @@ The usual workflow is:
 
 1. Start MLflow locally.
 2. Train a model and log it to MLflow.
-3. Use the generated MLflow `run_id` to start the prediction API.
+3. Export or bundle the selected model for serving.
 4. Send records to the API and receive fare predictions.
 
 You do not need to run every command in this README every time. Use the section
@@ -75,7 +75,15 @@ uv run python pipeline.py \
 ```
 
 The training pipeline logs parameters, metrics, and the trained model to MLflow.
-It also prints a `run_id`, which is needed when serving the model.
+It also exports the champion model under `02_model_training/artifacts/`.
+
+For the standalone API image, copy the selected exported model into:
+
+```text
+03_deployment/saved_models/model.joblib
+```
+
+The current repository includes a bundled champion model for local demo serving.
 
 ## Run With Docker Compose
 
@@ -85,29 +93,25 @@ Start MLflow:
 docker compose up --build mlflow
 ```
 
-After training a model, add the selected run ID to
-`03_deployment/config/deployment.env`:
-
-```env
-RUN_ID=<your_run_id>
-MODEL_ARTIFACT_PATH=final_model
-```
-
-Then start the API:
+Start the API:
 
 ```bash
 docker compose up --build api
 ```
+
+The API first looks for `03_deployment/saved_models/model.joblib`. If that file
+is present, the service can run without MLflow at inference time.
 
 ## Run The API Without Docker
 
 From `03_deployment/`:
 
 ```bash
-RUN_ID=<your_run_id> \
-MLFLOW_TRACKING_URI=http://127.0.0.1:5001 \
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 9696
 ```
+
+If no bundled model is available, the API can still load from MLflow by setting
+`RUN_ID` and `MLFLOW_TRACKING_URI`.
 
 ## Test The API
 
@@ -156,7 +160,7 @@ The exact prediction value depends on the trained model.
 - `02_model_training/models/train.py`: trains and registers a candidate model
 - `02_model_training/models/compare_models.py`: compares candidate and champion models
 - `03_deployment/app/main.py`: starts the FastAPI app
-- `03_deployment/src/models/predict.py`: loads an MLflow model and scores records
+- `03_deployment/src/models/predict.py`: loads a bundled or MLflow model and scores records
 
 ## Airflow
 

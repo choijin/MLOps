@@ -21,10 +21,6 @@ services:
       context: .
       dockerfile: 03_deployment/Dockerfile
     image: fair-price-prediction-service:v1
-    depends_on:
-      - mlflow
-    env_file:
-      - 03_deployment/config/deployment.env
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5001
     volumes:
