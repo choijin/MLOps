@@ -23,7 +23,33 @@ services:
     image: fair-price-prediction-service:v1
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5001
+      RUN_ID: ${RUN_ID:-}
+      MODEL_ARTIFACT_PATH: ${MODEL_ARTIFACT_PATH:-final_model}
     volumes:
       - ./mlflow:/mlflow
     ports:
       - "9696:9696"
+
+  train:
+    build:
+      context: .
+      dockerfile: 03_deployment/Dockerfile
+    image: fair-price-prediction-service:v1
+    depends_on:
+      - mlflow
+    working_dir: /app/02_model_training
+    command:
+      - /bin/sh
+      - -c
+      - >
+        /app/.venv/bin/python pipeline.py
+        --train-start-year ${TRAIN_START_YEAR:-2024}
+        --train-year ${TRAIN_YEAR:-2025}
+        --train-end-month ${TRAIN_END_MONTH:-1}
+        --spec-path config/model_build_spec.json
+        --tracking-uri http://mlflow:5001
+        --experiment-name ${EXPERIMENT_NAME:-zoomcamp-model}
+        --registered-model-name ${REGISTERED_MODEL_NAME:-nyc-taxi-ridge}
+    volumes:
+      - ./mlflow:/mlflow
+      - ./02_model_training/artifacts:/app/02_model_training/artifacts

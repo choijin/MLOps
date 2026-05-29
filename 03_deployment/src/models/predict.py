@@ -62,12 +62,12 @@ def predict_records(
     model_artifact_path: str = DEFAULT_MODEL_ARTIFACT_PATH,
     spec_path: Path = DEFAULT_SPEC_PATH,
 ) -> list[float]:
-    """Predict fares from raw records using a loaded, local, or MLflow model."""
+    """Predict fares from raw records using a loaded, MLflow, or local model."""
     if model is None:
-        if local_model_path.is_file():
-            model = load_local_model(local_model_path)
-        elif run_id:
+        if run_id:
             model = load_mlflow_model(run_id, tracking_uri, model_artifact_path)
+        elif local_model_path.is_file():
+            model = load_local_model(local_model_path)
         else:
             raise ValueError(
                 "No bundled model found and RUN_ID was not provided for MLflow loading."
@@ -86,7 +86,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--local-model-path",
         default=str(DEFAULT_LOCAL_MODEL_PATH),
-        help="Path to a bundled model.joblib file. Used before MLflow if present.",
+        help="Path to a bundled model.joblib file. Used when --run-id is not set.",
     )
     parser.add_argument(
         "--run-id",

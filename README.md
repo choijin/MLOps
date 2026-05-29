@@ -93,14 +93,30 @@ Start MLflow:
 docker compose up --build mlflow
 ```
 
+Train inside Docker:
+
+```bash
+docker compose run --rm train
+```
+
+The training container uses MLflow at `http://mlflow:5001` and writes exported
+models to `02_model_training/artifacts/`.
+
 Start the API:
 
 ```bash
 docker compose up --build api
 ```
 
-The API first looks for `03_deployment/saved_models/model.joblib`. If that file
-is present, the service can run without MLflow at inference time.
+By default, the API serves `03_deployment/saved_models/model.joblib`. To serve a
+freshly trained MLflow run instead, pass its run ID:
+
+```bash
+RUN_ID=<your_run_id> docker compose up --build api
+```
+
+If `RUN_ID` is set, the API loads from MLflow. If `RUN_ID` is not set, it falls
+back to the bundled model.
 
 ## Run The API Without Docker
 

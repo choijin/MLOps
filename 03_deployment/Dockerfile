@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
+COPY 02_model_training ./02_model_training
 COPY 03_deployment ./03_deployment
 
 WORKDIR /app/03_deployment

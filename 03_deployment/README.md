@@ -11,17 +11,17 @@ Layout:
 - `config/`: model and build configuration files
 - `saved_models/`: optional bundled model artifacts for standalone serving
 
-The deployment service first looks for `saved_models/model.joblib`. If that file
-exists, the API can serve predictions without contacting MLflow at inference
-time.
+The deployment service can serve either a selected MLflow run or a bundled local
+model.
 
-If no bundled model is present, provide `RUN_ID` plus the MLflow tracking URI so
-the API can load `runs:/<run_id>/final_model` at startup.
+If `RUN_ID` is set, the API loads `runs:/<run_id>/final_model` from MLflow. If
+`RUN_ID` is not set, the API falls back to `saved_models/model.joblib`.
 
 For local Docker usage, the root `docker-compose.yml` starts:
 
 - an `mlflow` service backed by `./mlflow`
 - an `api` service that serves the bundled model by default
+- a `train` service that runs the training pipeline against the MLflow service
 
 `02_model_training/models/compare_models.py` exports the active champion model.
 Copy the selected `model.joblib` into `03_deployment/saved_models/` before

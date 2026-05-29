@@ -32,16 +32,16 @@ class PredictionService:
         self.model = None
 
     def load(self) -> None:
-        """Load the bundled model or MLflow run artifact into memory."""
+        """Load the requested MLflow run or bundled model into memory."""
         if self.model is None:
-            if self.local_model_path.is_file():
-                self.model = load_local_model(self.local_model_path)
-            elif self.run_id:
+            if self.run_id:
                 self.model = load_mlflow_model(
                     run_id=self.run_id,
                     tracking_uri=self.tracking_uri,
                     model_artifact_path=self.model_artifact_path,
                 )
+            elif self.local_model_path.is_file():
+                self.model = load_local_model(self.local_model_path)
             else:
                 raise ValueError(
                     "No bundled model found and RUN_ID was not provided for MLflow loading."
