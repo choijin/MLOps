@@ -19,6 +19,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "apache-airflow>=3.2.2",
     "ipykernel>=7.2.0",
     "matplotlib>=3.10.0",
     "seaborn>=0.13.2",
