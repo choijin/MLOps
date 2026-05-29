@@ -7,16 +7,14 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-try:
-    from .feature_engineering import prepare_training_data
-except ImportError:
-    from feature_engineering import prepare_training_data
+from features.feature_engineering import prepare_training_data
 
 
 BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_{year}-{month:02d}.parquet"
 
 
 def load_spec(spec_path: Path) -> dict:
+    """Load and validate the saved model-build specification."""
     spec = json.loads(spec_path.read_text())
     required_keys = {
         "target",
@@ -34,6 +32,7 @@ def load_spec(spec_path: Path) -> dict:
 
 
 def load_month(year: int, month: int) -> pd.DataFrame:
+    """Download one raw monthly parquet file from the public taxi dataset."""
     url = BASE_URL.format(year=year, month=month)
     logging.info("Downloading %s-%02d ...", year, month)
     return pd.read_parquet(url)
@@ -45,6 +44,7 @@ def iter_month_pairs(
     end_year: int,
     end_month: int,
 ) -> Iterable[tuple[int, int]]:
+    """Yield inclusive year-month pairs between the requested start and end dates."""
     year, month = start_year, start_month
     while (year < end_year) or (year == end_year and month <= end_month):
         yield year, month
@@ -56,17 +56,20 @@ def iter_month_pairs(
 
 
 def load_month_pairs(pairs: Iterable[tuple[int, int]]) -> pd.DataFrame:
+    """Load and concatenate multiple monthly taxi files into one dataframe."""
     frames = [load_month(year, month) for year, month in pairs]
     return pd.concat(frames, ignore_index=True)
 
 
 def next_month(year: int, month: int) -> tuple[int, int]:
+    """Return the year and month immediately following the given period."""
     if month == 12:
         return year + 1, 1
     return year, month + 1
 
 
 def choose_default_cutoff(today: date) -> tuple[int, int]:
+    """Pick the latest completed month relative to today's date."""
     if today.month == 1:
         return today.year - 1, 12
     return today.year, today.month - 1
@@ -80,6 +83,7 @@ def load_split_data(
     ohe_cols: list[str],
     target: str,
 ) -> dict | None:
+    """Load train/test months, engineer features, and create train/validation splits."""
     if not 1 <= train_end_month <= 12:
         raise ValueError("train_end_month must be between 1 and 12")
 
@@ -142,6 +146,7 @@ def load_split_data(
 def _train_val_indices(
     n_rows: int, val_fraction: float = 0.3
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Create deterministic shuffled train and validation index arrays."""
     rng = np.random.default_rng(seed=42)
     indices = np.arange(n_rows)
     rng.shuffle(indices)

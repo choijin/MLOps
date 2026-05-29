@@ -10,12 +10,12 @@ import mlflow
 import mlflow.sklearn
 from mlflow.tracking import MlflowClient
 
-try:
-    from .dataset_build import choose_default_cutoff, load_spec, load_split_data
-    from .evaluate import rmse_from_log
-except ImportError:
-    from dataset_build import choose_default_cutoff, load_spec, load_split_data
-    from evaluate import rmse_from_log
+from data.dataset_build import choose_default_cutoff, load_spec, load_split_data
+from models.evaluate import rmse_from_log
+
+
+TRAINING_ROOT = Path(__file__).resolve().parent.parent
+DEPLOYMENT_METADATA_PATH = TRAINING_ROOT / "artifacts" / "model_result.json"
 
 
 def compare_and_promote_candidate(
@@ -28,6 +28,7 @@ def compare_and_promote_candidate(
     champion_alias: str = "champion",
     delete_candidate_on_promotion: bool = False,
 ) -> dict[str, Any]:
+    """Compare candidate and champion models on the test split and promote if better."""
     mlflow.set_tracking_uri(tracking_uri)
     client = MlflowClient(tracking_uri=tracking_uri)
 
@@ -104,6 +105,7 @@ def export_model_for_serving(
     model_alias: str,
     export_dir: Path,
 ) -> dict[str, Any]:
+    """Export the active alias model to a local directory for offline inspection or serving."""
     mlflow.set_tracking_uri(tracking_uri)
     client = MlflowClient(tracking_uri=tracking_uri)
     model_version = client.get_model_version_by_alias(model_name, model_alias).version
@@ -124,9 +126,39 @@ def export_model_for_serving(
     return metadata
 
 
+def get_alias_deployment_metadata(
+    tracking_uri: str,
+    model_name: str,
+    model_alias: str,
+) -> dict[str, Any]:
+    """Return deployment metadata for the current registered model alias."""
+    mlflow.set_tracking_uri(tracking_uri)
+    client = MlflowClient(tracking_uri=tracking_uri)
+    model_version = client.get_model_version_by_alias(model_name, model_alias)
+    return {
+        "model_name": model_name,
+        "model_alias": model_alias,
+        "model_version": int(model_version.version),
+        "run_id": model_version.run_id,
+        "model_artifact_path": "final_model",
+        "model_uri": f"runs:/{model_version.run_id}/final_model",
+    }
+
+
+def write_deployment_config(
+    metadata: dict[str, Any],
+    metadata_path: Path = DEPLOYMENT_METADATA_PATH,
+) -> None:
+    """Write deployment-ready champion metadata so deployment config can be updated manually."""
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text(json.dumps(metadata, indent=2))
+    logging.info("Wrote deployment metadata to %s", metadata_path)
+
+
 def default_export_dir(model_alias: str) -> str:
+    """Build a timestamped export directory for a given model alias."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return str(Path("models") / model_alias / timestamp)
+    return str(Path("artifacts") / "model_exports" / model_alias / timestamp)
 
 
 def run_model_promotion(
@@ -139,6 +171,7 @@ def run_model_promotion(
     delete_candidate_on_promotion: bool,
     export_dir: Path | None,
 ) -> int:
+    """Run candidate promotion, log the result, and emit champion deployment metadata."""
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)
 
@@ -185,6 +218,14 @@ def run_model_promotion(
             )
             mlflow.log_dict(export_metadata, "serving_export_metadata.json")
 
+        deployment_metadata = get_alias_deployment_metadata(
+            tracking_uri=tracking_uri,
+            model_name=registered_model_name,
+            model_alias=champion_alias,
+        )
+        write_deployment_config(deployment_metadata)
+        mlflow.log_dict(deployment_metadata, "deployment_config.json")
+
     metrics = {
         "candidate_alias_rmse": round(promotion_result["candidate_rmse"], 3),
     }
@@ -193,11 +234,13 @@ def run_model_promotion(
 
     logging.info("Promotion run complete")
     logging.info("Run ID: %s", run.info.run_id)
+    logging.info("Champion deployment run_id: %s", deployment_metadata["run_id"])
     logging.info("Metrics: %s", json.dumps(metrics, indent=2))
     return 0
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for model comparison and optional promotion."""
     today = date.today()
     default_year, default_end = choose_default_cutoff(today)
 
@@ -207,7 +250,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-start-year", type=int, default=2024)
     parser.add_argument("--train-year", type=int, default=default_year)
     parser.add_argument("--train-end-month", type=int, default=default_end)
-    parser.add_argument("--spec-path", default="model_build_spec.json")
+    parser.add_argument("--spec-path", default="config/model_build_spec.json")
     parser.add_argument("--tracking-uri", default="http://127.0.0.1:5001")
     parser.add_argument("--experiment-name", default="zoomcamp-model")
     parser.add_argument("--registered-model-name", default="nyc-taxi-ridge")
@@ -227,6 +270,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Load evaluation data and execute the compare-and-promote flow."""
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )

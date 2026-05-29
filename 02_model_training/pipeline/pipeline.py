@@ -3,29 +3,26 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-try:
-    from .compare_models import run_model_promotion
-    from .dataset_build import load_spec, load_split_data
-    from .train import run_train
-except ImportError:
-    from compare_models import run_model_promotion
-    from dataset_build import load_spec, load_split_data
-    from train import run_train
+from data.dataset_build import load_spec, load_split_data
+from models.compare_models import run_model_promotion
+from models.train import run_train
 
 
 def default_export_dir(model_alias: str) -> str:
+    """Build a timestamped export directory for a given model alias."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return str(Path("models") / model_alias / timestamp)
+    return str(Path("artifacts") / "model_exports" / model_alias / timestamp)
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the end-to-end training and promotion pipeline."""
     parser = argparse.ArgumentParser(
         description="Run the full training pipeline: train candidate, then compare and promote"
     )
     parser.add_argument("--train-start-year", type=int, default=2024)
     parser.add_argument("--train-year", type=int, required=True)
     parser.add_argument("--train-end-month", type=int, required=True)
-    parser.add_argument("--spec-path", default="model_build_spec.json")
+    parser.add_argument("--spec-path", default="config/model_build_spec.json")
     parser.add_argument("--tracking-uri", default="http://127.0.0.1:5001")
     parser.add_argument("--experiment-name", default="zoomcamp-model")
     parser.add_argument("--registered-model-name", default="nyc-taxi-ridge")
@@ -50,6 +47,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Load the training data once and run training followed by model promotion."""
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )

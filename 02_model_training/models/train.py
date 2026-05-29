@@ -11,22 +11,13 @@ from joblib import dump
 from mlflow.tracking import MlflowClient
 from sklearn.linear_model import Ridge
 
-try:
-    from .evaluate import rmse_from_log
-    from .preprocessor import (
-        build_inference_model,
-        make_preprocessor,
-        select_feature_indices,
-    )
-    from .dataset_build import choose_default_cutoff, load_spec, load_split_data
-except ImportError:
-    from evaluate import rmse_from_log
-    from preprocessor import (
-        build_inference_model,
-        make_preprocessor,
-        select_feature_indices,
-    )
-    from dataset_build import choose_default_cutoff, load_spec, load_split_data
+from data.dataset_build import choose_default_cutoff, load_spec, load_split_data
+from features.preprocessor import (
+    build_inference_model,
+    make_preprocessor,
+    select_feature_indices,
+)
+from models.evaluate import rmse_from_log
 
 
 def export_model_artifact(
@@ -34,6 +25,7 @@ def export_model_artifact(
     export_dir: Path,
     metadata: dict,
 ) -> None:
+    """Write a serialized model and its metadata to the requested export directory."""
     export_dir.mkdir(parents=True, exist_ok=True)
     dump(model, export_dir / "model.joblib")
     (export_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
@@ -41,8 +33,9 @@ def export_model_artifact(
 
 
 def default_export_dir(model_alias: str) -> str:
+    """Build a timestamped artifact export directory for a given alias."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return str(Path("models") / model_alias / timestamp)
+    return str(Path("artifacts") / "model_exports" / model_alias / timestamp)
 
 
 def choose_best_ridge_alpha(
@@ -51,6 +44,7 @@ def choose_best_ridge_alpha(
     x_val,
     y_val,
 ) -> tuple[float, float, list[dict[str, float]]]:
+    """Search a log-spaced Ridge alpha grid and return the best validation result."""
     best_alpha = None
     best_val_rmse = float("inf")
     search_results = []
@@ -77,6 +71,7 @@ def run_train(
     candidate_alias: str,
     export_dir: Path | None,
 ) -> int:
+    """Train, register, and optionally export a candidate Ridge model."""
     num_cols = spec["num_cols"]
     ohe_cols = spec["ohe_cols"]
     te_cols = spec["te_cols"]
@@ -161,6 +156,7 @@ def run_train(
             )
 
     logging.info("Retrain complete")
+    logging.info("Run ID: %s", run.info.run_id)
     logging.info("Model URI: %s", model_uri)
     logging.info(
         "Metrics: %s",
@@ -176,6 +172,7 @@ def run_train(
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for candidate training and MLflow registration."""
     default_year, default_end = choose_default_cutoff(date.today())
     parser = argparse.ArgumentParser(
         description="Train a candidate model and register it in MLflow"
@@ -183,7 +180,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-start-year", type=int, default=2024)
     parser.add_argument("--train-year", type=int, default=default_year)
     parser.add_argument("--train-end-month", type=int, default=default_end)
-    parser.add_argument("--spec-path", default="model_build_spec.json")
+    parser.add_argument("--spec-path", default="config/model_build_spec.json")
     parser.add_argument("--tracking-uri", default="http://127.0.0.1:5001")
     parser.add_argument("--experiment-name", default="zoomcamp-model")
     parser.add_argument("--registered-model-name", default="nyc-taxi-ridge")
@@ -197,6 +194,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Load data and execute the training workflow from the command line."""
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )

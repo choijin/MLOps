@@ -8,19 +8,23 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
 class SparseColumnSelector(BaseEstimator, TransformerMixin):
+    """Select a fixed set of transformed sparse feature columns by index."""
     def __init__(self, indices: list[int]):
         self.indices = indices
 
     def fit(self, x, y=None):
+        """Return the selector unchanged because fitting is not required."""
         return self
 
     def transform(self, x):
+        """Subset the transformed matrix to the configured feature indices."""
         return x[:, self.indices]
 
 
 def make_preprocessor(
     num_cols: list[str], ohe_cols: list[str], te_cols: list[str]
 ) -> ColumnTransformer:
+    """Build the shared preprocessing pipeline used for training and inference."""
     return ColumnTransformer(
         [
             (
@@ -68,6 +72,7 @@ def select_feature_indices(
     preprocessor: ColumnTransformer,
     selected_feature_names: list[str],
 ) -> list[int]:
+    """Map selected transformed feature names back to their column indices."""
     feature_names = preprocessor.get_feature_names_out()
     name_to_idx = {name: idx for idx, name in enumerate(feature_names)}
     missing = [name for name in selected_feature_names if name not in name_to_idx]
@@ -85,6 +90,7 @@ def build_inference_model(
     selected_indices: list[int],
     alpha: float,
 ) -> Pipeline:
+    """Build the final preprocessing, selection, and Ridge regression pipeline."""
     return Pipeline(
         [
             ("preprocess", make_preprocessor(num_cols, ohe_cols, te_cols)),

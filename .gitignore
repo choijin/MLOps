@@ -5,5 +5,6 @@ __pycache__/
 .ipynb_checkpoints/
 mlflow/
 *.db
+02_model_training/artifacts/
 03_deployment/config/deployment.env
 03_deployment/config/deployment_config.json

@@ -1,0 +1,39 @@
+{
+  "target": "fare_amount",
+  "num_cols": [
+    "passenger_count",
+    "pickup_hour",
+    "pickup_dayofweek",
+    "pickup_month",
+    "is_weekend",
+    "rush_hour",
+    "trip_duration_min_log",
+    "trip_distance_log"
+  ],
+  "ohe_cols": [
+    "VendorID",
+    "RatecodeID",
+    "trip_type",
+    "store_and_fwd_flag"
+  ],
+  "te_cols": [
+    "route"
+  ],
+  "selected_feature_names": [
+    "num__pickup_hour",
+    "num__pickup_dayofweek",
+    "num__pickup_month",
+    "num__trip_duration_min_log",
+    "num__trip_distance_log",
+    "ohe__VendorID_1.0",
+    "ohe__VendorID_2.0",
+    "ohe__RatecodeID_1.0",
+    "ohe__RatecodeID_2.0",
+    "ohe__RatecodeID_5.0",
+    "ohe__trip_type_1.0",
+    "ohe__trip_type_2.0",
+    "ohe__store_and_fwd_flag_N",
+    "ohe__store_and_fwd_flag_Y",
+    "te__route"
+  ]
+}
