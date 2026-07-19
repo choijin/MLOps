@@ -111,9 +111,9 @@ Start the API:
 docker compose up --build api
 ```
 
-With `RUN_ID`, the API serves `runs:/<RUN_ID>/final_model` from MLflow.
-Without `RUN_ID`, it falls back to `03_deployment/saved_models/model.joblib`.
-To update that fallback model, copy your exported champion `model.joblib` into
+- With `RUN_ID`, the API serves `runs:/<RUN_ID>/final_model` from MLflow.
+- Without `RUN_ID`, it falls back to `03_deployment/saved_models/model.joblib`.
+- To update that fallback model, copy your exported champion `model.joblib` into
 `03_deployment/saved_models/` before rebuilding the API image.
 
 ## Local Workflow Without Docker
