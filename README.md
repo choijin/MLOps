@@ -1,35 +1,34 @@
-# NYC Taxi Fare Prediction MLOps
+# Fair Price Prediction MLOps Service
 
-This project builds a small local MLOps workflow for predicting NYC green taxi
-fares. The goal was to move beyond a notebook-only model and practice the pieces
-around it: training pipelines, experiment tracking, model registration,
-containerization, and a prediction API.
+This project builds a local MLOps workflow for training, tracking, selecting, and
+serving a regression model through an API.
 
-The project currently runs locally. MLflow is used for tracking and model
-artifacts, and FastAPI serves predictions through a local web service.
+The model currently uses NYC green taxi trip data as the example dataset, but the
+main focus of the project is the MLOps system around the model: reusable training
+code, MLflow experiment tracking, champion model selection, Dockerized services,
+and FastAPI inference.
 
 ## What It Does
 
-- trains a Ridge regression fare prediction model
-- logs parameters, metrics, and model artifacts to MLflow
-- compares candidate and champion models
-- serves predictions with FastAPI
-- supports Docker Compose for local MLflow, training, and API services
-- includes a bundled model in the API image so the app can be tried without
-  training first
+- Trains a Ridge regression model for fare prediction
+- Logs parameters, metrics, and model artifacts to MLflow
+- Compares candidate models and exports champion model metadata
+- Serves predictions through a FastAPI web service
+- Uses Docker Compose to run MLflow, training, and API services locally
+- Includes a demo model inside the API image so you can test the service before running the full training workflow
 
 ## Project Layout
 
 - `01_initial_ml_build/`: initial notebook exploration
-- `02_model_training/`: training pipeline, feature code, model comparison, Airflow DAG
-- `03_deployment/`: FastAPI app, Dockerfile, and bundled demo model
-- `docker-compose.yml`: local MLflow, training, and API services
+- `02_model_training/`: training pipeline, feature code, model comparison, and Airflow DAG
+- `03_deployment/`: FastAPI app, Dockerfile, config, and bundled demo model
+- `docker-compose.yml`: local MLflow, training, and API service orchestration
 
-## Quick Try
+## Recommended First Run: Try the API
 
-The API image includes a bundled trained model for demo use. This means someone
-can run the web service and send a prediction request without setting up MLflow
-or training a model first.
+The API image already includes a small trained demo model. You can start the web
+service and send a prediction request without setting up MLflow or training a
+new model first.
 
 ```bash
 docker compose up --build api
@@ -41,7 +40,7 @@ Health check:
 curl http://127.0.0.1:9696/health
 ```
 
-Prediction:
+Prediction request:
 
 ```bash
 curl -X POST http://127.0.0.1:9696/predict \
@@ -64,7 +63,7 @@ curl -X POST http://127.0.0.1:9696/predict \
   }'
 ```
 
-Response shape:
+Example response:
 
 ```json
 {
@@ -72,24 +71,30 @@ Response shape:
 }
 ```
 
-The exact value can change when a different model is served.
+The exact prediction can change when a different model is served.
 
-## Train And Serve Through MLflow
+## Full Docker Workflow: Train, Track, And Serve
 
-For the fuller MLOps workflow, start MLflow and run the training pipeline:
+Use this path when you want to train a different model and run the full local
+MLOps workflow.
 
 ```bash
 docker compose up --build mlflow
+```
+
+In a second terminal:
+
+```bash
 docker compose run --rm train
 ```
 
-Training writes champion model metadata to:
+Training logs runs to MLflow and writes the selected champion metadata to:
 
 ```text
 02_model_training/artifacts/model_result.json
 ```
 
-Copy the champion `run_id` into a local deployment env file:
+Create the API env file and set the champion run:
 
 ```bash
 cp 03_deployment/config/deployment.env.example 03_deployment/config/deployment.env
@@ -100,17 +105,20 @@ RUN_ID=<champion_run_id>
 MODEL_ARTIFACT_PATH=final_model
 ```
 
-Then start the API:
+Start the API:
 
 ```bash
 docker compose up --build api
 ```
 
-When `RUN_ID` is set, the API loads `runs:/<RUN_ID>/final_model` from MLflow.
-When `RUN_ID` is not set, it falls back to the bundled model in
-`03_deployment/saved_models/model.joblib`.
+With `RUN_ID`, the API serves `runs:/<RUN_ID>/final_model` from MLflow.
+Without `RUN_ID`, it falls back to `03_deployment/saved_models/model.joblib`.
+To update that fallback model, copy your exported champion `model.joblib` into
+`03_deployment/saved_models/` before rebuilding the API image.
 
-## Local Commands Without Docker
+## Local Workflow Without Docker
+
+Use this path when you want to run the same pieces directly on your machine.
 
 Start MLflow:
 
@@ -143,13 +151,12 @@ Run the API:
 
 ```bash
 cd 03_deployment
+
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 9696
 ```
 
 ## Notes
 
-- This is a local-first project, not a production cloud deployment.
-- `deployment.env`, MLflow files, databases, caches, and training artifacts are
-  intentionally ignored by Git.
-- The bundled model is included mainly so the Docker image can be pulled and
-  tested easily. The MLflow path is the main training and model-selection flow.
+- This is a local-first MLOps project, not a production cloud deployment.
+- `deployment.env`, MLflow files, databases, caches, and generated training
+  artifacts are intentionally ignored by Git.
